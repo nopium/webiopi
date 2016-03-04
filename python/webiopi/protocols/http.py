@@ -66,7 +66,7 @@ class HTTPServer(BaseHTTPServer.HTTPServer, threading.Thread):
             self.index = index
         else:
             self.index = "index.html"
-            
+
         self.handler = handler
         self.auth = auth
         if (realm == None):
@@ -76,7 +76,7 @@ class HTTPServer(BaseHTTPServer.HTTPServer, threading.Thread):
 
         self.running = True
         self.start()
-            
+
     def get_request(self):
         sock, addr = self.socket.accept()
         sock.settimeout(10.0)
@@ -100,30 +100,30 @@ class HTTPHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
     def log_message(self, fmt, *args):
         pass
-    
+
     def log_error(self, fmt, *args):
         pass
-        
+
     def version_string(self):
         return VERSION_STRING
-    
+
     def checkAuthentication(self):
         if self.server.auth == None or len(self.server.auth) == 0:
             return True
-        
+
         authHeader = self.headers.get('Authorization')
         if authHeader == None:
             return False
-        
+
         if not authHeader.startswith("Basic "):
             return False
-        
+
         auth = authHeader.replace("Basic ", "")
         if PYTHON_MAJOR >= 3:
             auth_hash = encrypt(auth.encode())
         else:
             auth_hash = encrypt(auth)
-            
+
         if auth_hash == self.server.auth:
             return True
         return False
@@ -132,11 +132,11 @@ class HTTPHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         self.send_response(401)
         self.send_header("WWW-Authenticate", self.server.authenticateHeader)
         self.end_headers();
-        
-    
+
+
     def logRequest(self, code):
         self.logger.debug('"%s %s %s" - %s %s (Client: %s <%s>)' % (self.command, self.path, self.request_version, code, self.responses[code][0], self.client_address[0], self.headers["User-Agent"]))
-    
+
     def sendResponse(self, code, body=None, contentType="text/plain"):
         if code >= 400:
             if body != None:
@@ -146,6 +146,10 @@ class HTTPHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         else:
             self.send_response(code)
             self.send_header("Cache-Control", "no-cache")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
+            self.send_header("Access-Control-Allow-Headers", "Authorization")
+
             if body != None:
                 encodedBody = body.encode();
                 self.send_header("Content-Type", contentType);
@@ -163,8 +167,8 @@ class HTTPHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             else:
                 return filepath
         return None
-        
-                
+
+
     def serveFile(self, relativePath):
         if self.server.docroot != None:
             path = self.findFile(self.server.docroot + "/" + relativePath)
@@ -172,7 +176,7 @@ class HTTPHandler(BaseHTTPServer.BaseHTTPRequestHandler):
                 path = self.findFile("./" + relativePath)
 
         else:
-            path = self.findFile("./" + relativePath)                
+            path = self.findFile("./" + relativePath)
             if path == None:
                 path = self.findFile(WEBIOPI_DOCROOT + "/" + relativePath)
 
@@ -183,15 +187,15 @@ class HTTPHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             return self.sendResponse(404, "Not Found")
 
         realPath = os.path.realpath(path)
-        
+
         if realPath.endswith(".py"):
             return self.sendResponse(403, "Not Authorized")
-        
-        if not (realPath.startswith(os.getcwd()) 
+
+        if not (realPath.startswith(os.getcwd())
                 or (self.server.docroot and realPath.startswith(self.server.docroot))
                 or realPath.startswith(WEBIOPI_DOCROOT)):
             return self.sendResponse(403, "Not Authorized")
-        
+
         (contentType, encoding) = mime.guess_type(path)
         f = codecs.open(path, encoding=encoding)
         data = f.read()
@@ -202,17 +206,17 @@ class HTTPHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
         self.logRequest(200)
-        
+
     def processRequest(self):
         self.request.settimeout(None)
         if not self.checkAuthentication():
             return self.requestAuthentication()
-        
+
         request = self.path.replace(self.server.context, "/").split('?')
         relativePath = request[0]
         if relativePath[0] == "/":
             relativePath = relativePath[1:]
-            
+
         if relativePath == "webiopi" or relativePath == "webiopi/":
             self.send_response(301)
             self.send_header("Location", "/")
@@ -227,7 +231,7 @@ class HTTPHandler(BaseHTTPServer.BaseHTTPRequestHandler):
                     params[name] = value
                 else:
                     params[s] = None
-        
+
         compact = False
         if 'compact' in params:
             compact = str2bool(params['compact'])
@@ -244,9 +248,9 @@ class HTTPHandler(BaseHTTPServer.BaseHTTPRequestHandler):
                 result = self.server.handler.do_POST(relativePath, self.rfile.read(length), compact)
             else:
                 result = (405, None, None)
-                
+
             (code, body, contentType) = result
-            
+
             if code > 0:
                 self.sendResponse(code, body, contentType)
             else:
@@ -262,9 +266,13 @@ class HTTPHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         except Exception as e:
             self.sendResponse(500)
             raise e
-            
+
     def do_GET(self):
         self.processRequest()
 
     def do_POST(self):
+        self.processRequest()
+
+    def do_OPTIONS(self):
+        self.sendResponse(200)
         self.processRequest()
